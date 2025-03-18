@@ -1,0 +1,8 @@
+flask
+vanna[postgres,mysql,openai,pinecone]
+db-dtypes
+python-dotenv
+pinecone
+fastembed
+openai
+langsmith
