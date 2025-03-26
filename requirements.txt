@@ -1,5 +1,5 @@
 flask
-vanna[postgres,mysql,openai,pinecone]
+vanna[chromadb,postgres,mysql,openai,pinecone]
 db-dtypes
 python-dotenv
 pinecone
