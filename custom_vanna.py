@@ -51,16 +51,10 @@ class CustomVanna(ChromaDB_VectorStore, OpenAI_Chat):
         self.embedding_model = config.get('embedding_model')
         self.chat_client = wrap_openai(OpenAI(api_key=chat_api_key, base_url=llm_base_url))
         self.embedding_client = wrap_openai(OpenAI(api_key=embedding_api_key, base_url="https://api.openai.com/v1"))
-        self.chroma_client = chromadb.HttpClient(
-            host=os.environ['CHROMA_HOST'], 
-            port=os.environ['CHROMA_PORT'], 
-            settings=Settings(anonymized_telemetry=False, allow_reset=True, is_persistent=True, 
-                              chroma_server_host=os.environ['CHROMA_HOST'], chroma_server_http_port=int(os.environ['CHROMA_PORT']))
-        )
         
         chroma_config = {
             'path': config.get('chroma_path', './chroma'),
-            'client': self.chroma_client,
+            'client': 'persistent',
             'embedding_function': OpenAIEmbedding(api_key=embedding_api_key, model=self.embedding_model),
             'n_results_sql': 5,
             'n_results_documentation': 5,
