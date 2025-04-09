@@ -4,12 +4,15 @@ from langsmith.wrappers import wrap_openai
 from vanna.chromadb import ChromaDB_VectorStore
 from chromadb.api.types import EmbeddingFunction
 from vanna.flask import VannaFlaskAPI, VannaFlaskApp
-from flask import jsonify
+from flask import jsonify, request, send_from_directory, url_for
 from vanna.flask.auth import NoAuth
 import os
 from cache import MemoryCache
 import chromadb
 from chromadb.config import Settings
+
+from xunfei_tts_ws_python3 import Ws_Param, run_websocket
+import uuid
 class OpenAIEmbedding(EmbeddingFunction):
     def __init__(self, api_key: str, model: str = "text-embedding-ada-002", base_url: str = "https://api.openai.com/v1"):
         self.client = wrap_openai(OpenAI(api_key=api_key, base_url=base_url))
@@ -56,7 +59,7 @@ class CustomVanna(ChromaDB_VectorStore, OpenAI_Chat):
             'path': config.get('chroma_path', './chroma'),
             'client': 'persistent',
             'embedding_function': OpenAIEmbedding(api_key=embedding_api_key, model=self.embedding_model),
-            'n_results_sql': 5,
+            'n_results_sql': 20,
             'n_results_documentation': 5,
             'n_results_ddl': 5,
         }
@@ -186,6 +189,89 @@ class CustomVannaFlaskApp(VannaFlaskApp):
                     "type": "df",
                     "id": "training_data",
                     "df": df.to_json(orient="records")
+                })
+                
+            except Exception as e:
+                return jsonify({
+                    "type": "error",
+                    "error": str(e)
+                })
+                
+                
+        @self.flask_app.route("/static/audio/<path:filename>")
+        def proxy_audio(filename):
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            audio_dir = os.path.join(current_dir, 'static', 'audio')
+            if filename:
+              return send_from_directory(audio_dir, filename)
+
+            # Return 404
+            return "File not found", 404
+                
+        @self.flask_app.route("/api/v0/generate_tts", methods=["POST"])
+        @self.requires_auth
+        def generate_tts(user: any):
+            try:
+                # 从请求中获取所有参数
+                request_data = request.get_json()
+                
+                # 检查必需的参数
+                required_params = ['text', 'appId', 'apiSecret', 'apiKey']
+                missing_params = [param for param in required_params if param not in request_data]
+                
+                if missing_params:
+                    return jsonify({
+                        "type": "error",
+                        "error": f"Missing required parameters: {', '.join(missing_params)}"
+                    }), 400
+                    
+                # 获取参数
+                text = request_data['text']
+                app_id = request_data['appId']
+                api_secret = request_data['apiSecret']
+                api_key = request_data['apiKey']
+                voice = request_data.get('voice', 'x_xiaomei')
+                
+                # 生成唯一的文件名
+                output_filename = f'tts_{uuid.uuid4()}.mp3'
+                audio_dir = os.path.join('./static', 'audio')
+                os.makedirs(audio_dir, exist_ok=True)
+                output_path = os.path.join(audio_dir, output_filename)
+                
+                # 初始化讯飞TTS参数
+                wsParam = Ws_Param(
+                    APPID=app_id,
+                    APISecret=api_secret,
+                    APIKey=api_key,
+                    Text=text,
+                    Voice=voice
+                )
+
+                # 运行TTS转换
+                success = run_websocket(wsParam, output_path)
+                
+                if not success:
+                    return jsonify({
+                        "type": "error",
+                        "error": "Failed to generate audio"
+                    }), 500
+
+                # 返回音频文件URL
+                relative_audio_url = url_for('static', filename=f'audio/{output_filename}')
+        
+                # 从环境变量中获取域名
+                domain = os.environ.get("DOMAIN", "http://localhost:80")
+                
+                # 拼接完整的 URL
+                audio_url = f"{domain}{relative_audio_url}"
+                        
+                return jsonify({
+                    "type": "success",
+                    "data": {
+                        "audio_url": audio_url,
+                        "text": text,
+                        "voice": voice
+                    }
                 })
                 
             except Exception as e:

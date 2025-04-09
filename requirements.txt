@@ -6,3 +6,5 @@ pinecone
 fastembed
 openai
 langsmith
+websockets
+websocket-client
